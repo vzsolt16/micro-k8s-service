@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage-service
+  namespace: tw5-demo
+  labels: { app: storage-service }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: storage-service }
+  template:
+    metadata:
+      labels: { app: storage-service }
+    spec:
+      containers:
+        - name: storage-service
+          image: storage-service:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8080 }]
+          env:
+            - name: PORT
+              value: "8080"
+            - name: DB_HOST
+              value: "storage-db.tw5-demo.svc.cluster.local"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: storage-db-secret, key: DB_USER } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: storage-db-secret, key: DB_PASSWORD } }
+            - name: DB_NAME
+              valueFrom: { secretKeyRef: { name: storage-db-secret, key: DB_NAME } }
+            # "pass the auth service URL as an env var" requirement
+            - name: AUTH_SERVICE_URL
+              value: "http://auth-service.tw5-demo.svc.cluster.local:8080/auth"
+          resources:
+            requests: { cpu: 100m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: storage-service
+  namespace: tw5-demo
+spec:
+  selector: { app: storage-service }
+  ports: [{ port: 8080, targetPort: 8080 }]

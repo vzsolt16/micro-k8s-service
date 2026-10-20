@@ -1,0 +1,44 @@
+# nginx.conf lives in a ConfigMap and is mounted into the LB pods at
+# container-creation time (see 40-nginx-lb.yaml's volumeMounts). Editing this
+# ConfigMap + a rollout restart is all it takes to change routing.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-lb-config
+  namespace: tw5-demo
+data:
+  nginx.conf: |
+    worker_processes auto;
+    events { worker_connections 1024; }
+    http {
+      server {
+        listen 80;
+
+        location /health {
+          default_type text/plain;
+          return 200 'ok';
+        }
+
+        # Each location proxies to the microservice's ClusterIP Service (not
+        # a hardcoded pod IP). Kubernetes keeps that Service's endpoint list
+        # in sync with the live pods automatically, so when the HPA scales a
+        # deployment up or down, kube-proxy starts/stops sending traffic to
+        # those pods immediately -- nginx needs zero reload or reconfiguration
+        # for the new pods to be included. That's what makes the balancing
+        # "dynamic" and pod-level, not just a static upstream list.
+        location /auth {
+          proxy_pass http://auth-service.tw5-demo.svc.cluster.local:8080;
+          proxy_set_header Host $host;
+        }
+
+        location /storage {
+          proxy_pass http://storage-service.tw5-demo.svc.cluster.local:8080;
+          proxy_set_header Host $host;
+        }
+
+        location /hr {
+          proxy_pass http://hr-service.tw5-demo.svc.cluster.local:8080;
+          proxy_set_header Host $host;
+        }
+      }
+    }

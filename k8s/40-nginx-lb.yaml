@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-lb
+  namespace: tw5-demo
+  labels: { app: nginx-lb }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: nginx-lb }
+  template:
+    metadata:
+      labels: { app: nginx-lb }
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports: [{ containerPort: 80 }]
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 64Mi }
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+          readinessProbe:
+            httpGet: { path: /health, port: 80 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: nginx-lb-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-lb
+  namespace: tw5-demo
+spec:
+  # Publicly accessible entry point. On Minikube this needs `minikube tunnel`
+  # running to actually get an external IP; on EKS the cloud controller
+  # provisions a real ELB for you.
+  type: LoadBalancer
+  selector: { app: nginx-lb }
+  ports: [{ port: 80, targetPort: 80 }]
